@@ -1,40 +1,48 @@
-Secure Password Vault (AES-256 Project)
-Network Security - Implementation Project
+This version keeps everything professional and focuses on the technical decisions that make this a "Security Project" rather than just a simple script. It highlights your understanding of threat models and cryptographic standards.
 
-This is a local password manager I built to practice implementing modern cryptographic standards in Python. The goal was to create a "Zero-Knowledge" storage system where the master password is never saved and the data is protected against both tampering and brute-force attempts.
+##Python Secure Vault (AES-256-GCM)
+Implementation of Modern Cryptographic Standards for Local Credential Storage
 
-Security Implementation Details
-Key Derivation (Argon2id)
-Instead of using standard PBKDF2 or SHA-256 (which are vulnerable to GPU cracking), I used Argon2id.
+This project is a local password manager built to demonstrate the practical application of industry-standard cryptography. The vault follows a Zero-Knowledge architecture, ensuring that the user's master password is never stored and the data remains encrypted even if the database file is compromised.
 
-Why: It’s the current industry winner for password hashing.
+##Security Architecture
+1. Key Derivation (Argon2id)
+To transform the master password into a 256-bit encryption key, I implemented Argon2id.
 
-Settings: I configured it with a 64MB memory cost. This makes it much harder for an attacker to use specialized hardware (ASICs) or GPUs to try millions of passwords a second.
+Brute-Force Resistance: Unlike standard SHA-256 or PBKDF2, Argon2id is "memory-hard."
 
-Encryption (AES-256-GCM)
-For the actual data storage, I used AES-256 in GCM (Galois/Counter Mode).
+Configuration: Configured with a 64MB memory cost, making it significantly more difficult for attackers to use specialized hardware (ASICs) or high-end GPUs to perform offline brute-force attacks.
 
-Encryption + Integrity: Most basic tutorials use CBC mode, but I chose GCM because it provides an "Authentication Tag."
+2. Authenticated Encryption (AES-256-GCM)
+For data encryption, the vault uses AES-256 in GCM (Galois/Counter Mode).
 
-Protection: If anyone tries to modify the database file (bit-flipping attacks), the decryption will fail because the tag won't match. It ensures the data hasn't been tampered with.
+Confidentiality + Integrity: GCM is an "Authenticated Encryption" mode. Every entry produces an Authentication Tag.
 
-Database & Forensics
-Zero-Knowledge: The master password is used to derive the encryption key but is never stored on disk. I used a "canary" (an encrypted known value) to check if the password is correct during login.
+Tamper Protection: If the database file is modified (bit-flipping or unauthorized edits), the decryption process will detect the mismatch and fail automatically, ensuring data integrity.
 
-Salt & Pepper: I used a unique 32-byte salt for every vault to prevent rainbow table attacks.
+3. Database & Forensic Security
+Zero-Knowledge Storage: The master password is used solely for key derivation in volatile memory (RAM). Verification is handled through an encrypted "canary" value.
 
-SQLite Security: The app uses the VACUUM command. This is a forensic precaution to ensure that when a password is deleted, the data is physically cleared from the database file rather than just marked as "free space."
+Forensic Prevention: The implementation utilizes the SQLite VACUUM command. This ensures that when a record is deleted, the data is physically overwritten and purged from the storage sector rather than just being marked as "empty space."
 
-Technical Stack
-Language: Python 3.x
+##Technical Stack
+Language: Python 3.10+
 
-Libraries: cryptography.io (Hazmat layer for AES-GCM), sqlite3 for local storage, pyperclip for secure clipboard handling.
+Cryptography: cryptography.io (Hazmat layer for AES-GCM and Argon2)
 
-Randomness: Used secrets module (CSPRNG) for all salt and password generation.
+Database: SQLite3 for persistent storage
 
-How to Run
-Install dependencies: pip install cryptography pyperclip
+Randomness: secrets module (CSPRNG - Cryptographically Secure Pseudo-Random Number Generator)
 
-Run the main script: python password.py
+UI Helpers: pyperclip for secure clipboard handling
 
-On the first run, you will be prompted to create a Master Password.
+##Installation & Usage
+Install dependencies:
+
+Bash
+pip install cryptography pyperclip
+Run the application:
+
+Bash
+python password.py
+Initialization: On the first run, the system will prompt you to create a Master Password. Note: Due to the Zero-Knowledge nature of this app, there is no "Forgot Password" feature.
