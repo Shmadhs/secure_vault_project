@@ -39,10 +39,10 @@ def decrypt_password(key: bytes, encrypted_bundle: bytes) -> str:
     return plaintext_bytes.decode('utf-8')
 
 if __name__ == "__main__":
-    master_password = "MySuperSecretPassword123!"
+    master_password = "NothingHereLOSER"
     my_key, my_salt = derive_key_super_secure(master_password)
     
-    my_bank_password = "CorrectHorseBatteryStaple_99!"
+    my_bank_password = "WhatAreYouLoookingFor?Boy"
     encrypted_data = encrypt_password(my_key, my_bank_password)
     decrypted_password = decrypt_password(my_key, encrypted_data)
     
