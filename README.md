@@ -9,7 +9,7 @@ This project is a local password manager built to demonstrate the practical appl
 1. Key Derivation (Argon2id)
 To transform the master password into a 256-bit encryption key, I implemented Argon2id.
 
-Brute-Force Resistance: Unlike standard SHA-256 or PBKDF2, Argon2id is "memory-hard."
+Brute-Force Resistance: Unlike standard SHA-256 or PBKDF2, Argon2id is memory-hard.
 
 Configuration: Configured with a 64MB memory cost, making it significantly more difficult for attackers to use specialized hardware (ASICs) or high-end GPUs to perform offline brute-force attacks.
 
@@ -23,7 +23,7 @@ Tamper Protection: If the database file is modified (bit-flipping or unauthorize
 3. Database & Forensic Security
 Zero-Knowledge Storage: The master password is used solely for key derivation in volatile memory (RAM). Verification is handled through an encrypted "canary" value.
 
-Forensic Prevention: The implementation utilizes the SQLite VACUUM command. This ensures that when a record is deleted, the data is physically overwritten and purged from the storage sector rather than just being marked as "empty space."
+Forensic Prevention: The implementation utilizes the SQLite VACUUM command. This ensures that when a record is deleted, the data is physically overwritten and purged from the storage sector rather than just being marked as empty space.
 
 ##Technical Stack
 Language: Python 3.10+
