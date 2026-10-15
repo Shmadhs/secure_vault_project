@@ -1,0 +1,87 @@
+name: Release
+
+# Binaries are only ever built here, from a tagged commit, never on a laptop
+# and committed to git (v1 did that). Each artifact gets a SHA-256 sum and a
+# signed SLSA build-provenance attestation.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  binaries:
+    name: Binary (${{ matrix.asset }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            asset: svault-windows-x64.exe
+            built: dist/svault.exe
+          # Build on the oldest supported Ubuntu for broad glibc compatibility.
+          - os: ubuntu-22.04
+            asset: svault-linux-x64
+            built: dist/svault
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install . "pyinstaller>=6.10"
+      - run: pyinstaller --onefile --name svault --collect-data securevault packaging/svault_entry.py
+      - name: Smoke test
+        shell: bash
+        run: |
+          "${{ matrix.built }}" --version
+          "${{ matrix.built }}" gen --words 6
+      - shell: bash
+        run: mv "${{ matrix.built }}" "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+
+  python-dist:
+    name: Wheel and sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install build && python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+
+  publish:
+    name: GitHub release
+    needs: [binaries, python-dist]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # create the release
+      id-token: write       # sign the provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: "dist/*"
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
