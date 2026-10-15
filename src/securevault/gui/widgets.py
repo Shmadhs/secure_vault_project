@@ -5,10 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFontDatabase, QKeyEvent, QKeySequence
+from PySide6.QtGui import QFontDatabase, QFontMetrics, QKeyEvent, QKeySequence, QResizeEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QLineEdit,
@@ -22,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from .. import generator
 from ..cli import MIN_MASTER_BITS
+from . import ui
 from .ui import plain_label
 
 MASTER_PASSPHRASE_WORDS = 6
@@ -103,13 +103,9 @@ class PathField(QWidget):
         self.setFocusProxy(self.edit)
 
     def _browse(self) -> None:
-        start = self.edit.text().strip()
-        if self._save:
-            chosen, _ = QFileDialog.getSaveFileName(self, self._caption, start, self._filter)
-        else:
-            chosen, _ = QFileDialog.getOpenFileName(self, self._caption, start, self._filter)
-        if chosen:
-            self.edit.setText(str(Path(chosen)))
+        chosen = ui.choose_path(self, self._caption, self.edit.text().strip(), self._filter, save=self._save)
+        if chosen is not None:
+            self.edit.setText(str(chosen))
 
     def path(self) -> Path | None:
         text = self.edit.text().strip()
@@ -117,6 +113,90 @@ class PathField(QWidget):
 
     def set_path(self, path: Path | None) -> None:
         self.edit.setText(str(path) if path else "")
+
+
+class VaultPicker(QWidget):
+    """The vault file, shown as one quiet line with a Change... button.
+
+    The login screen is about the master password. Which file holds the vault
+    matters only to people with more than one, so it stays out of the way.
+    """
+
+    changed = Signal()
+
+    def __init__(self, file_filter: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._filter = file_filter
+        self._path: Path | None = None
+        self.label = plain_label("", self)
+        self.label.setStyleSheet("color: palette(placeholder-text);")
+        self.label.setMinimumWidth(200)
+        self.change = QPushButton("Change…", self)
+        self.change.setFlat(True)
+        self.change.clicked.connect(self.choose)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.label, 1)
+        layout.addWidget(self.change)
+
+    def choose(self) -> None:
+        start = str(self._path) if self._path else ""
+        chosen = ui.choose_path(self, "Open a vault", start, self._filter)
+        if chosen is not None:
+            self.set_path(chosen)
+
+    def path(self) -> Path | None:
+        return self._path
+
+    def set_path(self, path: Path | None) -> None:
+        self._path = path
+        self._render()
+        self.changed.emit()
+
+    def _render(self) -> None:
+        if self._path is None:
+            self.label.setText("No vault selected")
+            return
+        # One line, shortened in the middle: the folder matters less than the file name.
+        full = ui.display(f"Vault: {self._path}")
+        width = max(self.label.width(), 200)
+        self.label.setText(QFontMetrics(self.label.font()).elidedText(full, Qt.TextElideMode.ElideMiddle, width))
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._render()
+
+
+class Collapsible(QWidget):
+    """A section folded away behind a small toggle (used for "Advanced")."""
+
+    def __init__(self, title: str, content: QWidget, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.toggle = QToolButton(self)
+        self.toggle.setText(title)
+        self.toggle.setCheckable(True)
+        self.toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self.toggle.setAutoRaise(True)
+        self.content = content
+        content.setParent(self)
+        content.hide()
+        self.toggle.toggled.connect(self.set_expanded)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.toggle)
+        layout.addWidget(content)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self.toggle.blockSignals(True)
+        self.toggle.setChecked(expanded)
+        self.toggle.blockSignals(False)
+        self.toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        self.content.setVisible(expanded)
+
+    @property
+    def expanded(self) -> bool:
+        return self.toggle.isChecked()
 
 
 class NewMasterPassword(QWidget):

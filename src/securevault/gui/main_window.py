@@ -48,7 +48,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__, clipboard, totp
+from .. import __version__, clipboard, osutil, totp
 from ..errors import EntryNotFoundError, VaultConflictError, VaultError
 from ..model import Entry, VaultContents
 from . import prefs as prefs_store
@@ -58,8 +58,9 @@ from .generator_dialog import GeneratorDialog
 from .guards import EventGuard, IdleTimer
 from .prefs import Preferences
 from .session import Session
-from .unlock import UnlockView
+from .unlock import UnlockView, heading
 from .vault_dialogs import AuditDialog, BackupsDialog, PasswdDialog, PreferencesDialog, describe
+from .welcome import WelcomeView
 
 MASK = "•" * 10  # fixed width, like `svault show`: the length of the password is not revealed
 _CLIPBOARD_ERRORS = (clipboard.ClipboardUnavailableError, OSError, subprocess.SubprocessError)
@@ -358,13 +359,37 @@ class VaultView(QWidget):
         left_layout.addLayout(filters)
         left_layout.addWidget(self.table, 1)
         left_layout.addWidget(self.count)
-        splitter = QSplitter(self)
-        splitter.addWidget(left)
-        splitter.addWidget(self.detail)
-        splitter.setStretchFactor(0, 3)
-        splitter.setStretchFactor(1, 2)
+        self.splitter = QSplitter(self)
+        self.splitter.addWidget(left)
+        self.splitter.addWidget(self.detail)
+        self.splitter.setStretchFactor(0, 3)
+        self.splitter.setStretchFactor(1, 2)
+
+        # An empty vault gets one obvious next step instead of an empty table.
+        self.empty = QWidget(self)
+        self.add_first = QPushButton("＋  Add your first password", self.empty)
+        self.add_first.setDefault(True)
+        self.add_first.setMinimumHeight(40)
+        empty_layout = QVBoxLayout(self.empty)
+        empty_layout.addStretch(1)
+        empty_layout.addWidget(heading("Your vault is empty", self.empty, grow=6), 0, Qt.AlignmentFlag.AlignHCenter)
+        empty_layout.addWidget(
+            ui.plain_label("Add the logins you want SecureVault to remember for you.", self.empty),
+            0,
+            Qt.AlignmentFlag.AlignHCenter,
+        )
+        empty_layout.addSpacing(12)
+        empty_layout.addWidget(self.add_first, 0, Qt.AlignmentFlag.AlignHCenter)
+        empty_layout.addStretch(2)
+        self.empty.hide()
+
         layout = QVBoxLayout(self)
-        layout.addWidget(splitter)
+        layout.addWidget(self.splitter)
+        layout.addWidget(self.empty)
+
+    def set_empty(self, empty: bool) -> None:
+        self.splitter.setVisible(not empty)
+        self.empty.setVisible(empty)
 
     def selected_entry(self) -> Entry | None:
         rows = self.table.selectionModel().selectedRows()
@@ -392,6 +417,7 @@ class VaultView(QWidget):
         self.tag.blockSignals(False)
 
     def purge(self) -> None:
+        self.set_empty(False)
         self.model.clear()
         self.detail.clear()
         self.search.clear()
@@ -436,12 +462,15 @@ class MainWindow(QMainWindow):
         self.destroyed.connect(drop_hook)
 
         self.unlock_view = UnlockView(vault_path, keyfile_path, self._on_unlocked, self)
+        self.welcome_view = WelcomeView(vault_path, self._on_unlocked, self._have_vault, self)
         self.vault_view = VaultView(self.copy_value, self)
+        self.vault_view.add_first.clicked.connect(self.new_entry)
         self.vault_view.search.textChanged.connect(self.refresh)
         self.vault_view.tag.currentIndexChanged.connect(self.refresh)
         self.vault_view.table.selectionModel().selectionChanged.connect(lambda *_: self._show_selected())
         self.vault_view.table.doubleClicked.connect(self.edit_entry)
         self.stack = QStackedWidget(self)
+        self.stack.addWidget(self.welcome_view)
         self.stack.addWidget(self.unlock_view)
         self.stack.addWidget(self.vault_view)
         self.setCentralWidget(self.stack)
@@ -465,7 +494,7 @@ class MainWindow(QMainWindow):
         return action
 
     def _build_actions(self) -> None:
-        self.act_new = self._action("&New entry…", self.new_entry, QKeySequence.StandardKey.New)
+        self.act_new = self._action("&Add password…", self.new_entry, QKeySequence.StandardKey.New)
         self.act_edit = self._action("&Edit entry…", self.edit_entry, "Ctrl+E")
         self.act_delete = self._action("&Delete entry…", self.delete_entry, QKeySequence.StandardKey.Delete)
         self.act_copy_user = self._action(
@@ -491,7 +520,7 @@ class MainWindow(QMainWindow):
             vault_menu.addAction(action)
         vault_menu.addSeparator()
         vault_menu.addAction(self.act_quit)
-        entry_menu = bar.addMenu("&Entry")
+        entry_menu = self.entry_menu = bar.addMenu("&Entry")
         for action in (self.act_new, self.act_edit, self.act_delete):
             entry_menu.addAction(action)
         entry_menu.addSeparator()
@@ -500,7 +529,7 @@ class MainWindow(QMainWindow):
         tools_menu = bar.addMenu("&Tools")
         for action in (self.act_generator, self.act_audit, self.act_find):
             tools_menu.addAction(action)
-        toolbar = self.addToolBar("Main")
+        toolbar = self.toolbar = self.addToolBar("Main")
         toolbar.setMovable(False)
         for action in (self.act_new, self.act_edit, self.act_delete, self.act_generator, self.act_audit, self.act_lock):
             toolbar.addAction(action)
@@ -521,7 +550,12 @@ class MainWindow(QMainWindow):
     def _update_actions(self) -> None:
         unlocked = self._session is not None
         selected = unlocked and self.vault_view.detail.entry is not None
+        # While locked there is nothing to act on, so the vault's actions are
+        # hidden rather than shown disabled (which looks broken).
+        self.toolbar.setVisible(unlocked)
+        self.entry_menu.menuAction().setVisible(unlocked)
         for action in self._vault_actions:
+            action.setVisible(unlocked)
             action.setEnabled(unlocked)
         for action in (self.act_edit, self.act_delete, self.act_copy_user, self.act_copy_pass, self.act_copy_url):
             action.setEnabled(selected)
@@ -539,18 +573,26 @@ class MainWindow(QMainWindow):
         prefs_store.save(self._settings, self.prefs)
         self.setWindowTitle(f"SecureVault — {ui.display(session.path.name)}")
         self.stack.setCurrentWidget(self.vault_view)
+        self.welcome_view.leave()
         self.refresh()
-        if not len(session.contents):
-            self.vault_view.detail.show_entry(None, "The vault is empty. Add an entry with New entry.")
-        self.vault_view.search.setFocus()
+        if len(session.contents):
+            self.vault_view.search.setFocus()
+        else:
+            self.vault_view.add_first.setFocus()
         self.idle.arm()
         self._update_actions()
         self.statusBar().showMessage("Vault unlocked.", 5000)
 
     def _show_locked(self, reason: str) -> None:
+        """The login screen, or the welcome screen if there is no vault to unlock yet."""
         self.setWindowTitle("SecureVault")
-        self.stack.setCurrentWidget(self.unlock_view)
-        self.unlock_view.reset()
+        path = self.unlock_view.path.path()
+        if path is not None and path.exists():
+            self.stack.setCurrentWidget(self.unlock_view)
+            self.unlock_view.reset()
+        else:
+            self.welcome_view.reset(path or osutil.default_vault_path())
+            self.stack.setCurrentWidget(self.welcome_view)
         self._update_actions()
         self.statusBar().showMessage(f"Locked {reason}." if reason else f"SecureVault {__version__}")
 
@@ -579,6 +621,13 @@ class MainWindow(QMainWindow):
         if not self._busy and self._pending_lock is not None:
             reason, self._pending_lock = self._pending_lock, None
             QTimer.singleShot(0, lambda: self.lock(reason))
+
+    def _have_vault(self) -> None:
+        """From the welcome screen: pick an existing vault and go to the login screen."""
+        self.welcome_view.leave()
+        self.stack.setCurrentWidget(self.unlock_view)
+        self.unlock_view.path.choose()
+        self.unlock_view.reset()
 
     def changeEvent(self, event: QEvent) -> None:
         super().changeEvent(event)
@@ -613,6 +662,7 @@ class MainWindow(QMainWindow):
         if tag:
             entries = [e for e in entries if tag.casefold() in (t.casefold() for t in e.tags)]
         view.model.set_entries(entries)
+        view.set_empty(not len(contents))
         view.count.setText(f"{len(entries)} of {len(contents)} entries")
         view.select(keep)
         self._show_selected(force=True)  # an edited entry is the same object, so re-render it
@@ -623,10 +673,7 @@ class MainWindow(QMainWindow):
         entry = self.vault_view.selected_entry()
         detail = self.vault_view.detail
         if force or entry is not detail.entry or entry is None:
-            empty = not len(self._session.contents)
-            detail.show_entry(
-                entry, "The vault is empty. Add an entry with New entry." if empty else "Select an entry."
-            )
+            detail.show_entry(entry)
         self._update_actions()
 
     def select_entry(self, entry_id: str) -> None:
@@ -681,7 +728,7 @@ class MainWindow(QMainWindow):
 
         if self._run(EntryDialog(apply, self.copy_value, None, self)) and added:
             self.select_entry(added[-1])
-            self.statusBar().showMessage("Entry added.", 5000)
+            self.statusBar().showMessage("Password added.", 5000)
 
     def edit_entry(self) -> None:
         entry = self.vault_view.detail.entry

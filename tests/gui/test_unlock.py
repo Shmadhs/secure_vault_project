@@ -91,9 +91,10 @@ def test_missing_keyfile_is_detected_before_the_kdf(
     path = make_vault(keyfile=crypto.keyfile_secret(keyfile))
     win = MainWindow(settings, path)
     qtbot.addWidget(win)
+    assert not win.unlock_view.keyfile_row.isHidden()  # shown because the header says so
     unlock(win)
     assert win.session is None
-    assert "requires its keyfile" in win.unlock_view.error.text()
+    assert "also needs its keyfile" in win.unlock_view.error.text()
     unlock(win, keyfile=keyfile)
     assert win.session is not None
     assert win.session.keyfile_path == keyfile
@@ -109,7 +110,7 @@ def test_not_a_vault_and_missing_file(qtbot: QtBot, settings: QSettings, tmp_pat
 
     win.unlock_view.path.set_path(tmp_path / "missing.svault")
     unlock(win)
-    assert "Create one with New vault" in win.unlock_view.error.text()
+    assert "There is no vault at" in win.unlock_view.error.text()
 
 
 @pytest.fixture

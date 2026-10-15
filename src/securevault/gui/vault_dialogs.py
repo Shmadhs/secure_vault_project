@@ -38,7 +38,7 @@ from . import ui
 from .guards import CAPTURE_EXCLUSION_SUPPORTED
 from .prefs import Preferences
 from .session import Session
-from .widgets import NewMasterPassword, PathField, SecretField
+from .widgets import Collapsible, NewMasterPassword, PathField, SecretField
 
 KEYFILE_FILTER = "Keyfiles (*.key *.keyfile);;All files (*)"
 VAULT_FILTER = "SecureVault vaults (*.svault);;All files (*)"
@@ -80,50 +80,46 @@ def _confirm_weak(parent: QWidget, master: NewMasterPassword) -> bool:
     )
 
 
-class NewVaultDialog(QDialog):
-    """``svault init``: choose a path and a master password, optionally create a keyfile."""
+class NewVaultForm(QWidget):
+    """Create a vault: the master password first; location, keyfile and unlock time under "Advanced".
+
+    Shared by the welcome screen (first run) and the New vault dialog, so both
+    create vaults exactly the way ``svault init`` does.
+    """
 
     def __init__(self, default_path: Path, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("New vault")
-        self.setMinimumWidth(520)
-        self.vault: Vault | None = None
-        self.keyfile_path: Path | None = None
-
-        self.path = PathField("Create vault", VAULT_FILTER, save=True, parent=self)
-        self.path.set_path(default_path)
         self.master = NewMasterPassword(self)
-        self.with_keyfile = QCheckBox("Also create and require a keyfile (a second factor)", self)
-        self.keyfile = PathField("Create keyfile", KEYFILE_FILTER, save=True, parent=self)
+        options = QWidget(self)
+        self.path = PathField("Create vault", VAULT_FILTER, save=True, parent=options)
+        self.path.set_path(default_path)
+        self.with_keyfile = QCheckBox("Also require a keyfile (a second factor)", options)
+        self.keyfile = PathField("Create keyfile", KEYFILE_FILTER, save=True, parent=options)
         self.keyfile.setEnabled(False)
         self.with_keyfile.toggled.connect(self.keyfile.setEnabled)
-        self.unlock_time = _unlock_time_box(self)
-        self.error = _error_label(self)
-
-        form = QFormLayout()
-        form.addRow("Vault file:", self.path)
+        self.unlock_time = _unlock_time_box(options)
+        form = QFormLayout(options)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.addRow("Save the vault as:", self.path)
+        form.addRow("", self.with_keyfile)
+        form.addRow("Keyfile:", self.keyfile)
         form.addRow("Unlock time:", self.unlock_time)
-        password_box = QGroupBox("Master password", self)
-        QVBoxLayout(password_box).addWidget(self.master)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel, self)
-        self.create_button = buttons.addButton("Create vault", QDialogButtonBox.ButtonRole.AcceptRole)
-        buttons.accepted.connect(self.try_accept)
-        buttons.rejected.connect(self.reject)
+        self.advanced = Collapsible("Advanced: where to save it, keyfile, unlock time", options, self)
+        self.error = _error_label(self)
         layout = QVBoxLayout(self)
-        layout.addLayout(form)
-        layout.addWidget(password_box)
-        layout.addWidget(self.with_keyfile)
-        layout.addWidget(self.keyfile)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.master)
+        layout.addWidget(self.advanced)
         layout.addWidget(self.error)
-        layout.addWidget(buttons)
 
-    def try_accept(self) -> None:
+    def create_vault(self) -> tuple[Vault, Path | None] | None:
+        """Validate, then create the vault. Returns it unlocked, or None after showing the problem."""
         path = self.path.path()
         try:
             if path is None:
-                raise ValueError("Choose where to create the vault.")
+                raise ValueError("Choose where to save the vault (under Advanced).")
             if path.exists():
-                raise ValueError(f"A vault already exists at {path}.")
+                raise ValueError(f"A vault already exists at {path}. Unlock it instead, or choose another place.")
             password = self.master.password()
             keyfile_path = self.keyfile.path() if self.with_keyfile.isChecked() else None
             if self.with_keyfile.isChecked() and keyfile_path is None:
@@ -132,9 +128,9 @@ class NewVaultDialog(QDialog):
                 raise ValueError("The keyfile and the vault must be different files.")
         except ValueError as exc:
             self.error.setText(ui.display(str(exc)))
-            return
+            return None
         if not _confirm_weak(self, self.master):
-            return
+            return None
         seconds = self.unlock_time.value()
         try:
             keyfile: bytes | None = None
@@ -146,21 +142,54 @@ class NewVaultDialog(QDialog):
                 kdf = crypto.calibrate_kdf(seconds)
                 return Vault.create(path, password, kdf=kdf, keyfile=keyfile)
 
-            self.vault = ui.run_blocking(self, "Calibrating key derivation and creating the vault…", work)
+            vault = ui.run_blocking(self, "Creating your vault…", work)
         except (VaultError, ValueError, OSError) as exc:
             self.error.setText(describe(exc))
-            return
-        self.keyfile_path = keyfile_path
+            return None
         if keyfile_path is not None:
             ui.info(
                 self,
                 "Keyfile created",
                 f"Created the keyfile {keyfile_path}.\n\nBack it up offline: without it the vault cannot be opened.",
             )
-        self.accept()
+        self.error.clear()
+        return vault, keyfile_path
+
+    def clear(self) -> None:
+        self.master.clear()
+        self.error.clear()
+
+
+class NewVaultDialog(QDialog):
+    """``svault init`` from the login screen, for a second vault. "Advanced" starts unfolded here."""
+
+    def __init__(self, default_path: Path, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("New vault")
+        self.setMinimumWidth(560)
+        self.vault: Vault | None = None
+        self.keyfile_path: Path | None = None
+        self.form = NewVaultForm(default_path, self)
+        self.form.advanced.set_expanded(True)
+        # Short names for the form's fields.
+        self.path, self.master, self.error = self.form.path, self.form.master, self.form.error
+        self.with_keyfile, self.keyfile = self.form.with_keyfile, self.form.keyfile
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel, self)
+        buttons.addButton("Create vault", QDialogButtonBox.ButtonRole.AcceptRole)
+        buttons.accepted.connect(self.try_accept)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.form)
+        layout.addWidget(buttons)
+
+    def try_accept(self) -> None:
+        created = self.form.create_vault()
+        if created is not None:
+            self.vault, self.keyfile_path = created
+            self.accept()
 
     def done(self, result: int) -> None:
-        self.master.clear()
+        self.form.clear()
         super().done(result)
 
 
@@ -266,7 +295,7 @@ class PasswdDialog(QDialog):
                 kdf = crypto.calibrate_kdf(seconds) if seconds else None
                 return session.vault.change_master_password(password, keyfile=keyfile, kdf=kdf)
 
-            self.removed_backups = ui.run_blocking(self, "Re-encrypting the vault under a new key…", work)
+            self.removed_backups = ui.run_blocking(self, "Changing the master password…", work)
         except VaultConflictError as exc:
             self.conflict = exc
             self.reject()

@@ -74,7 +74,7 @@ class EntryDialog(QDialog):
         # edited keeps the half-applied change. Comparing against it would make
         # a second Save look like "nothing changed" and silently drop the edit.
         self._original = deepcopy(entry)
-        self.setWindowTitle("Edit entry" if entry else "New entry")
+        self.setWindowTitle("Edit entry" if entry else "Add password")
         self.setMinimumWidth(460)
 
         self.title = QLineEdit(self)

@@ -6,9 +6,9 @@
   ``clear_if_unchanged`` themselves run unmodified.
 * Message boxes and dialogs are scripted through the two hooks every window
   uses (``ui.message`` and ``ui.run_dialog``), so the dialogs' own validation
-  and accept logic is what gets exercised. All three fixtures are autouse: a
-  real modal dialog would block a headless test forever, and an unexpected
-  one now fails the test instead.
+  and accept logic is what gets exercised. The system file dialog is replaced
+  the same way. These fixtures are autouse: a real modal dialog would block a
+  headless test forever, and an unexpected one now fails the test instead.
 * Vaults use the cheapest parameters the *production* KDF policy allows
   (64 MiB, t=3): the GUI never weakens that policy, so neither do its tests.
 """
@@ -102,6 +102,29 @@ class Dialogs:
             raise AssertionError(f"unexpected dialog: {type(dialog).__name__}")
         self.handlers.pop(0)(dialog)
         return dialog.result() == QDialog.DialogCode.Accepted
+
+
+@dataclass
+class FilePicker:
+    """Stands in for ui.choose_path (the system file dialog): returns queued answers in order."""
+
+    answers: list[Path | None] = field(default_factory=list)
+    captions: list[str] = field(default_factory=list)
+
+    def __call__(
+        self, parent: QWidget | None, caption: str, start: str, file_filter: str, *, save: bool = False
+    ) -> Path | None:
+        self.captions.append(caption)
+        if not self.answers:
+            raise AssertionError(f"unexpected file dialog: {caption}")
+        return self.answers.pop(0)
+
+
+@pytest.fixture(autouse=True)
+def files(monkeypatch: pytest.MonkeyPatch) -> FilePicker:
+    picker = FilePicker()
+    monkeypatch.setattr(ui, "choose_path", picker)
+    return picker
 
 
 @pytest.fixture(autouse=True)

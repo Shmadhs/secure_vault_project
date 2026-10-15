@@ -17,10 +17,11 @@ Two rules are enforced here so that no widget can forget them:
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Generic, TypeVar
 
 from PySide6.QtCore import QEventLoop, Qt, QThread
-from PySide6.QtWidgets import QDialog, QLabel, QMessageBox, QProgressDialog, QWidget
+from PySide6.QtWidgets import QDialog, QFileDialog, QLabel, QMessageBox, QProgressDialog, QWidget
 
 from ..cli import term_safe
 
@@ -88,6 +89,17 @@ def ask(parent: QWidget | None, title: str, text: str, *, icon: QMessageBox.Icon
 def run_dialog(dialog: QDialog) -> bool:
     """Show ``dialog`` modally and report whether it was accepted. Tests replace this hook."""
     return dialog.exec() == QDialog.DialogCode.Accepted
+
+
+def choose_path(
+    parent: QWidget | None, caption: str, start: str, file_filter: str, *, save: bool = False
+) -> Path | None:
+    """The system file picker. Every file choice goes through here, so tests can replace it."""
+    if save:
+        chosen, _ = QFileDialog.getSaveFileName(parent, caption, start, file_filter)
+    else:
+        chosen, _ = QFileDialog.getOpenFileName(parent, caption, start, file_filter)
+    return Path(chosen) if chosen else None
 
 
 class _Worker(QThread, Generic[T]):

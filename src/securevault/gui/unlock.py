@@ -1,4 +1,8 @@
-"""The unlock screen: vault file, master password and optional keyfile.
+"""The login screen: one master-password field, like any password manager.
+
+The vault file is a quiet line with a Change… button, and the keyfile field
+appears only when the vault actually requires one. Whether it does is read
+from the plaintext header, which holds no secrets, before any key derivation.
 
 Failures are reported the way the CLI's exit codes separate them, because
 they call for different actions:
@@ -17,7 +21,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .. import crypto, osutil
 from ..errors import AuthenticationError, IntegrityError, VaultError, VaultFormatError, WeakKdfError
@@ -25,7 +29,31 @@ from ..vault import Vault, read_header
 from . import ui
 from .session import Session
 from .vault_dialogs import KEYFILE_FILTER, VAULT_FILTER, BackupsDialog, NewVaultDialog, describe
-from .widgets import PathField, SecretField
+from .widgets import PathField, SecretField, VaultPicker
+
+
+def heading(text: str, parent: QWidget, grow: int = 8) -> QLabel:
+    label = ui.plain_label(text, parent)
+    font = label.font()
+    font.setPointSize(font.pointSize() + grow)
+    font.setBold(True)
+    label.setFont(font)
+    return label
+
+
+def link_button(text: str, parent: QWidget) -> QPushButton:
+    button = QPushButton(text, parent)
+    button.setFlat(True)
+    button.setCursor(Qt.CursorShape.PointingHandCursor)
+    return button
+
+
+def requires_keyfile(path: Path) -> bool:
+    """True if the vault's header says it needs a keyfile. False if unreadable (unlock reports why)."""
+    try:
+        return any(slot.keyfile for slot in read_header(path).slots)
+    except (VaultError, OSError):
+        return False
 
 
 class UnlockView(QWidget):
@@ -38,53 +66,56 @@ class UnlockView(QWidget):
     ) -> None:
         super().__init__(parent)
         self._on_unlocked = on_unlocked
-        self.path = PathField("Open vault", VAULT_FILTER, parent=self)
-        self.path.set_path(vault_path)
         self.password = SecretField("Master password", self)
         self.password.edit.returnPressed.connect(self.try_unlock)
+        self.password.setMinimumWidth(360)
+        self.unlock_button = QPushButton("Unlock", self)
+        self.unlock_button.setDefault(True)
+        self.unlock_button.clicked.connect(self.try_unlock)
         self.keyfile = PathField("Keyfile", KEYFILE_FILTER, parent=self)
         self.keyfile.set_path(keyfile_path)
+        self.keyfile_row = QWidget(self)
+        keyfile_form = QFormLayout(self.keyfile_row)
+        keyfile_form.setContentsMargins(0, 0, 0, 0)
+        keyfile_form.addRow("This vault also needs its keyfile:", self.keyfile)
         self.error = ui.plain_label("", self)
         self.error.setWordWrap(True)
         self.error.setStyleSheet("color: #c0392b;")
         self.notice = ui.plain_label("", self)
         self.notice.setWordWrap(True)
-        self.unlock_button = QPushButton("Unlock", self)
-        self.unlock_button.setDefault(True)
-        self.unlock_button.clicked.connect(self.try_unlock)
-        new_button = QPushButton("New vault…", self)
-        new_button.clicked.connect(self.new_vault)
-        backups_button = QPushButton("Backups…", self)
-        backups_button.clicked.connect(self.open_backups)
-        self.path.edit.editingFinished.connect(self._check_path)
+        self.path = VaultPicker(VAULT_FILTER, self)
+        self.path.changed.connect(self._check_path)
+        new_link = link_button("Create a new vault…", self)
+        new_link.clicked.connect(self.new_vault)
+        backups_link = link_button("Restore from a backup…", self)
+        backups_link.clicked.connect(self.open_backups)
 
-        heading = ui.plain_label("SecureVault is locked", self)
-        font = heading.font()
-        font.setPointSize(font.pointSize() + 6)
-        heading.setFont(font)
-        form = QFormLayout()
-        form.addRow("Vault file:", self.path)
-        form.addRow("Master password:", self.password)
-        form.addRow("Keyfile (optional):", self.keyfile)
-        row = QHBoxLayout()
-        row.addWidget(new_button)
-        row.addWidget(backups_button)
-        row.addStretch(1)
-        row.addWidget(self.unlock_button)
+        password_row = QHBoxLayout()
+        password_row.addWidget(self.password, 1)
+        password_row.addWidget(self.unlock_button)
+        links = QHBoxLayout()
+        links.addWidget(new_link)
+        links.addWidget(backups_link)
+        links.addStretch(1)
         box = QWidget(self)
-        box.setMinimumWidth(560)
-        box.setMaximumWidth(720)
+        box.setMinimumWidth(520)
+        box.setMaximumWidth(640)
         inner = QVBoxLayout(box)
-        inner.addWidget(heading)
-        inner.addLayout(form)
-        inner.addWidget(self.notice)
+        inner.setSpacing(12)
+        inner.addWidget(heading("SecureVault", box))
+        inner.addWidget(ui.plain_label("Enter your master password to unlock your passwords.", box))
+        inner.addLayout(password_row)
+        inner.addWidget(self.keyfile_row)
         inner.addWidget(self.error)
-        inner.addLayout(row)
+        inner.addWidget(self.notice)
+        inner.addSpacing(16)
+        inner.addWidget(self.path)
+        inner.addLayout(links)
         outer = QVBoxLayout(self)
         outer.addStretch(1)
         outer.addWidget(box, 0, Qt.AlignmentFlag.AlignHCenter)
         outer.addStretch(2)
-        self._check_path()
+        self.path.set_path(vault_path)
 
     def reset(self) -> None:
         self.password.clear()
@@ -96,11 +127,13 @@ class UnlockView(QWidget):
         path = self.path.path()
         notes = []
         if path is not None and not path.exists():
-            notes.append("There is no vault at this path yet. Create one with New vault…")
+            notes.append("There is no vault at this path. Choose another with Change…, or create one.")
         elif path is not None and osutil.is_group_or_world_accessible(path):
             notes.append("Warning: this vault file is readable by other users (chmod 600 it).")
         self.notice.setText(ui.display(" ".join(notes)))
         self.notice.setVisible(bool(notes))
+        needs = path is not None and path.exists() and requires_keyfile(path)
+        self.keyfile_row.setVisible(needs or self.keyfile.path() is not None)
 
     def _fail(self, text: str) -> None:
         self.password.clear()
@@ -113,21 +146,22 @@ class UnlockView(QWidget):
         keyfile_path = self.keyfile.path()
         self.error.clear()
         if path is None:
-            self.error.setText("Choose the vault file.")
+            self.error.setText("Choose your vault with Change…")
             return
         if not path.exists():
-            self.error.setText(ui.display(f"There is no vault at {path}. Create one with New vault…"))
+            self.error.setText(ui.display(f"There is no vault at {path}."))
             return
         if not password:
-            self.error.setText("Enter the master password.")
+            self.error.setText("Enter your master password.")
             return
         try:
             header = read_header(path)
             if keyfile_path is None and all(slot.keyfile for slot in header.slots):
-                self.error.setText("This vault requires its keyfile as well. Choose it under Keyfile.")
+                self.keyfile_row.show()
+                self.error.setText("This vault also needs its keyfile. Choose it above.")
                 return
             keyfile = crypto.keyfile_secret(keyfile_path) if keyfile_path else None
-            vault = ui.run_blocking(self, "Unlocking (Argon2id)…", lambda: Vault.open(path, password, keyfile=keyfile))
+            vault = ui.run_blocking(self, "Unlocking…", lambda: Vault.open(path, password, keyfile=keyfile))
         except AuthenticationError:
             self._fail("Wrong master password or keyfile.")
             return
@@ -161,7 +195,7 @@ class UnlockView(QWidget):
     def open_backups(self) -> None:
         path = self.path.path()
         if path is None:
-            self.error.setText("Choose the vault file first.")
+            self.error.setText("Choose your vault with Change… first.")
             return
         dialog = BackupsDialog(path, self.keyfile.path(), self)
         try:
