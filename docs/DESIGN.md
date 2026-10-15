@@ -172,3 +172,21 @@ excluded from screen capture.
 title like `<img src=...>` would otherwise render as markup. Showing escaped text
 in an editor would corrupt the entry on the next save. Opening a URL such as
 `\\host\share` on Windows sends the user's NTLM credentials to that host.
+
+### 16. The GUI leads with the password manager, not the file
+
+**Decision.** With no vault yet, the GUI opens a welcome screen that asks only
+for a master password; where the vault is saved, a keyfile and the unlock time
+are folded under "Advanced". With a vault, the login screen is one password
+field; the keyfile field appears only when the vault's header says a keyfile is
+required. While locked, the vault's actions are hidden, not shown disabled. An
+empty vault shows "Add your first password".
+
+**Rejected.** The first design: a lock screen with vault-file, password and
+keyfile fields, and a disabled "New entry" button in the toolbar. On a first run
+there was nothing to unlock, so the visible "New entry" never became usable and
+the screen read like a file-encryption tool.
+
+**Why it is safe.** Whether a keyfile is required is already public: the header
+is plaintext and documented as such in [FORMAT.md](FORMAT.md). Reading it before
+the key derivation reveals nothing new and saves a pointless Argon2id run.
