@@ -123,3 +123,52 @@ standard library.
 
 **Why.** Every dependency is supply-chain attack surface, and a password manager
 is a high-value target for exactly that.
+
+### 13. The GUI is an optional, thin layer over the same core
+
+**Decision.** `svault-gui` lives in `securevault/gui/`, installs only with the
+`gui` extra (PySide6-Essentials), and imports Qt lazily. It calls `Vault`,
+`model`, `generator`, `totp`, `audit` and `clipboard` exactly as the CLI does,
+and never touches `crypto.py`, `vault_format.py` or the file format.
+
+**Rejected.** The full `PySide6` package. It adds the Addons wheel, including
+QtWebEngine (a bundled Chromium), which is size and attack surface a password
+manager does not use. Also rejected: a second implementation of any vault logic
+in the GUI.
+
+**Why.** One core means one place to audit. The core test job runs without Qt
+installed, so the GUI cannot quietly become a dependency of the CLI.
+
+### 14. GUI threads and locking
+
+**Decision.** Argon2id (unlock, re-key, restore, calibration) runs on a worker
+thread while a local event loop keeps the window painting but ignores input.
+Everything else, including every save, runs on the GUI thread. The idle lock is
+a `QTimer`, which fires on that same thread.
+
+**Why.** The CLI shell's timer is a separate thread, which is why `Vault.lock()`
+takes a mutex. A `QTimer` cannot interrupt a save on its own thread at all. The
+one save that runs elsewhere (`passwd`) is protected twice: locking is deferred
+until the worker finishes, and the vault's mutex still applies. A lock also
+drops every reference the GUI holds (list model, detail pane, TOTP secret, open
+dialogs) and clears the clipboard if it still holds our last value.
+
+**Rollback.** When the CLI fails to save, the process exits and the change dies
+with it. The GUI keeps running, so a failed save restores the previous entries
+in memory. On a cross-process conflict it also locks, so the next unlock loads
+the file as it is now instead of overwriting another process's change.
+
+### 15. GUI display and clipboard rules
+
+**Decision.** Every label and message box shows vault text as plain text, after
+the same `term_safe()` escaping as the terminal. Editors hold the *raw* values,
+warn when a field contains control or bidi characters, and write back only the
+fields that changed. Secret fields cannot be copied, cut or dragged out, even
+when revealed; copying goes through the core clipboard (auto-clear, Windows
+history exclusion). URLs are copied, never opened. On Windows every window is
+excluded from screen capture.
+
+**Why.** Qt labels and message boxes guess whether text is HTML, so an imported
+title like `<img src=...>` would otherwise render as markup. Showing escaped text
+in an editor would corrupt the entry on the next save. Opening a URL such as
+`\\host\share` on Windows sends the user's NTLM credentials to that host.

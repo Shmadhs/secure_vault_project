@@ -42,6 +42,7 @@ design choice below is documented with its reasoning in
 | 🔄 **Migrate in and out** | Import CSV from Bitwarden, KeePassXC, Chrome/Edge and Firefox; export to CSV/JSON |
 | 💾 **Never lose data** | Crash-safe atomic saves, rotating encrypted backups, verified `restore`, conflict detection between processes |
 | 🖥️ **Interactive shell** | `svault shell`: unlock once, auto-locks after inactivity |
+| 🪟 **Desktop GUI (optional)** | `svault-gui`: the same core in a window, with idle auto-lock, lock on minimize and exclusion from screen capture on Windows |
 | 🌍 **Unicode-correct** | NFC-normalized passwords, so Greek and other accented passwords work on every OS and keyboard layout |
 
 ## Install
@@ -62,6 +63,14 @@ gh attestation verify svault-linux-x64 --repo Shmadhs/secure_vault_project
 
 **Linux clipboard:** install `wl-clipboard` (Wayland) or `xclip`/`xsel` (X11).
 Without them, use `--print`.
+
+**Desktop GUI (optional):** the GUI is an extra, so the core keeps its single
+runtime dependency. It adds PySide6-Essentials (Qt widgets only, no WebEngine):
+
+```bash
+python -m pip install "securevault[gui] @ git+https://github.com/Shmadhs/secure_vault_project.git"
+svault-gui
+```
 
 ## Usage
 
@@ -95,6 +104,42 @@ svault restore 1                  # verify a backup, then restore it
 svault info                       # file and KDF details, no password needed
 svault shell                      # interactive session with auto-lock
 ```
+
+### Desktop GUI
+
+`svault-gui [--vault PATH] [--keyfile PATH]` opens the same vault file as the
+CLI, through the same core: no separate format and no separate crypto code.
+
+* **Unlock screen**, with a different message for each failure: wrong password
+  or keyfile, missing keyfile, integrity failure (offers to restore a backup
+  right there, since the vault will not open), KDF parameters below the
+  security floor (a sign of a swapped file), or not a vault at all. *New vault…*
+  creates one, offering a generated six-word passphrase first.
+* **Entry list** with search (titles, usernames, URLs, tags, notes) and a tag
+  filter. **Detail pane** with the password masked at a fixed width, a reveal
+  toggle, copy buttons and a live TOTP code with a countdown.
+* **Add, edit and delete.** Deleting needs the title typed exactly as shown.
+  A failed save is rolled back. If another process changed the file meanwhile
+  (say `svault add` while the GUI was open), the GUI locks and asks you to
+  unlock again instead of overwriting it.
+* **Generator** with an entropy readout, **password health** (reused, weak,
+  stale), **change master password** (asks for the current one again, rotates
+  the vault key), **encrypted backups** and verified **restore**.
+* **Locking:** after 5 minutes without keyboard or mouse-click activity
+  (configurable), when minimized (optional), on exit, or with Ctrl+L. Locking
+  closes every open dialog, empties the list and the detail pane, and removes
+  the last copied value from the clipboard if it is still there.
+* **On Windows, its windows are excluded from screenshots and screen sharing**
+  (`SetWindowDisplayAffinity`), so a password revealed during a Teams or Zoom
+  call does not appear in it. This can be turned off in Preferences.
+
+| Shortcut | Action | Shortcut | Action |
+|---|---|---|---|
+| Ctrl+C | copy password | Ctrl+N | new entry |
+| Ctrl+B | copy username | Ctrl+E / double-click | edit entry |
+| Ctrl+U | copy URL | Del | delete entry |
+| Ctrl+T | copy TOTP code | Ctrl+G | generator |
+| Ctrl+F | search | Ctrl+L | lock |
 
 Default vault location: `%LOCALAPPDATA%\SecureVault\vault.svault` on Windows,
 `~/.local/share/securevault/vault.svault` on Linux. Override with `--vault` or
@@ -147,11 +192,16 @@ lists every residual risk.
 
 Every push runs on Windows, Linux and macOS with Python 3.10–3.14:
 
-* **249 tests**, including:
+* **314 tests**, including:
   * known-answer tests for Argon2id (RFC 9106 §5.3), TOTP (RFC 6238 Appendix B) and HOTP (RFC 4226);
   * a property test (Hypothesis) that flips random bits and checks the vault never opens;
   * truncation at every length, header splicing between vaults, rollback of the vault key after a password change;
-  * crash-during-save and cross-process conflict cases.
+  * crash-during-save and cross-process conflict cases;
+  * 61 GUI tests (pytest-qt, headless): every flow above, lock purging, rollback,
+    and hostile entries (HTML markup, bidi overrides, terminal escapes) that must
+    be displayed literally.
+* The core test job runs without Qt installed, and 4 more tests prove the GUI
+  stays optional: the CLI never loads Qt, and `svault-gui` explains the missing extra.
 * `ruff` (including the `bandit` rule set and Trojan-Source detection) and `mypy --strict` for all three platforms.
 * `bandit`, `pip-audit` and CodeQL.
 * Release binaries are built in CI, never committed, and ship with SHA-256 sums
@@ -163,9 +213,9 @@ Every push runs on Windows, Linux and macOS with Python 3.10–3.14:
 git clone https://github.com/Shmadhs/secure_vault_project.git
 cd secure_vault_project
 python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[dev]"            # core; add ",gui,gui-test" for the GUI and its tests
 
-pytest                      # tests (~30 s)
+pytest                      # tests (~30 s core, ~70 s with the GUI tests)
 ruff check src tests && ruff format --check src tests
 mypy --platform linux && mypy --platform win32
 bandit -c pyproject.toml -r src && pip-audit
@@ -184,12 +234,16 @@ src/securevault/
 ├── audit.py         reused / weak / stale detection
 ├── transfer.py      CSV import (Bitwarden, KeePassXC, browsers), CSV/JSON export
 ├── osutil.py        paths, permissions, process hardening
-└── cli.py           commands and the interactive shell
+├── cli.py           commands and the interactive shell
+└── gui/             optional PySide6 desktop GUI over the same core (svault-gui)
 ```
 
 ## Roadmap
 
-- [ ] Desktop GUI (PySide6), with the same core
+- [x] Desktop GUI (PySide6), with the same core
+- [ ] GUI: lock when the OS session locks or the machine sleeps
+- [ ] GUI: CSV import / export
+- [ ] Standalone GUI binary in the release workflow
 - [ ] Recovery-key slot (printable, high-entropy, fast KDF)
 - [ ] YubiKey HMAC-SHA1 challenge-response as a key slot
 - [ ] Offline breach check against a downloaded Have I Been Pwned hash list

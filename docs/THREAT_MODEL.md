@@ -20,10 +20,10 @@ tool that overstates its guarantees is worse than one that states its limits.
 | A1 | Steals the vault file (backup, cloud sync, lost laptop, stolen disk) | ✅ **Primary** | Argon2id with 64 MiB–1 GiB memory hardness. AES-256-GCM over *all* data. Random 256-bit vault key. Optional keyfile as a second factor. |
 | A2 | Modifies the vault file (malware without memory access, sync conflicts, bit rot) | ✅ | AEAD over the payload with the full header as AAD. Strict pre-authentication parsing. Integrity failures are reported distinctly and restorable from verified backups. |
 | A3 | Replaces the vault with one they built (to harvest the master password) | ✅ | KDF floor checked *before* the KDF runs; see [FORMAT.md](FORMAT.md#kdf-policy-checked-before-running-argon2). |
-| A4 | Observes the screen or terminal (shoulder surfing, screen sharing, scrollback) | ✅ | Echo-free prompts. Secrets never printed unless `--reveal`/`--print` is asked for. Passwords masked by default. |
+| A4 | Observes the screen or terminal (shoulder surfing, screen sharing, scrollback) | ✅ | Echo-free prompts. Secrets never printed unless `--reveal`/`--print` is asked for. Passwords masked by default (in the GUI at a fixed width, so the length does not show). GUI windows are excluded from screen capture on Windows. |
 | A5 | Reads clipboard history or cloud clipboard sync | ✅ Windows / ⚠️ Linux | Windows: history and cloud-sync exclusion formats. Everywhere: auto-clear that only removes our own value. Linux clipboard managers may still record it (see residual risks). |
 | A6 | Another local user on a shared Linux machine | ✅ | Vault 0600 in a 0700 directory. Secrets never in argv (passwords, TOTP). `PR_SET_DUMPABLE=0` blocks same-user ptrace on Linux. |
-| A7 | Plants malicious data via an imported CSV (terminal escape injection) | ✅ | All displayed fields pass through `term_safe()`, which neutralizes C0/C1 controls and bidi overrides, including OSC 52 clipboard writes. |
+| A7 | Plants malicious data via an imported CSV (terminal escape or GUI markup injection) | ✅ | All displayed fields pass through `term_safe()`, which neutralizes C0/C1 controls and bidi overrides, including OSC 52 clipboard writes. The GUI renders vault text as plain text only (no HTML), and never opens stored URLs. |
 | A8 | Plants files in the working directory to hijack imports | ✅ | The clipboard helper runs from the package directory, never from the cwd. |
 | A9 | Malware running as the user while the vault is unlocked | ❌ **Out of scope** | No user-space password manager can defend against this (keyloggers, memory reads). Auto-lock limits the window. |
 | A10 | Root / administrator / physical access to a running, unlocked machine | ❌ Out of scope | |
@@ -39,6 +39,7 @@ tool that overstates its guarantees is worse than one that states its limits.
 | **Clipboard** | – | – | – | History/cloud exclusion (Windows); clear-if-unchanged | – | Helper spawned without a shell, from a trusted cwd |
 | **Terminal I/O** | – | Escape-sequence neutralization | – | Echo-off prompts; masked output; prompts on stderr | – | – |
 | **Backups** | – | Each backup is a full AEAD vault; restore verifies before overwriting | – | Purged on master-password change (they hold the old key) | Rotated (newest 5) | – |
+| **GUI** | – | Plain-text rendering, raw values in editors | – | Idle/minimize/exit lock purges views and dialogs; no secret copy via Qt's clipboard; capture exclusion (Windows) | Argon2id off the GUI thread | Never opens URLs |
 | **Keyfile** | Second factor | – | – | Hashed with domain separation before entering Argon2 | Size-bounded (32 B – 1 MiB) | – |
 
 ## Residual risks, stated honestly
@@ -63,7 +64,16 @@ tool that overstates its guarantees is worse than one that states its limits.
    folder's permissions.
 6. **Stored TOTP secrets** turn two factors into one for anyone who opens the
    vault. This is a convenience trade-off.
-7. **Plaintext exports** are plaintext. The CLI demands typed confirmation and
+7. **The GUI adds more copies of secrets in memory.** Qt keeps its own
+   copies of text it displayed or that was typed into a field, and Python cannot
+   erase them. Locking drops every reference the GUI holds, which is the most a
+   Python/Qt program can do. Screen-capture exclusion exists only on Windows,
+   and the GUI does not yet lock when the OS session locks or the machine
+   sleeps (only on idle, minimize and exit). Text you copy yourself with Ctrl+C
+   from a non-secret editor field (username, notes) goes through the normal
+   system clipboard. The GUI also remembers the path of the last vault it opened
+   (never the keyfile path) in the per-user settings.
+8. **Plaintext exports** are plaintext. The CLI demands typed confirmation and
    writes them with `0600`/`O_EXCL`, but what happens to the file afterwards is
    up to the user.
 

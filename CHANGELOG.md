@@ -4,6 +4,30 @@ All notable changes are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Optional desktop GUI, `svault-gui` (`pip install "securevault[gui]"`, PySide6-Essentials).
+  It is a thin layer over the same core as the CLI: unlock (with distinct messages for a
+  wrong password, a missing keyfile, an integrity failure, a sub-floor KDF and a non-vault
+  file), new vault, entry list with search and tag filter, detail pane with a masked
+  password and live TOTP, add/edit/delete (exact-title confirmation), generator with
+  entropy, password-health audit, master-password change (re-authenticates first),
+  encrypted backups and verified restore, reachable from the lock screen too.
+- GUI locking: idle auto-lock, lock on minimize and on exit. A lock closes every dialog,
+  empties every view and clears the last copied value from the clipboard if unchanged.
+- GUI hardening: all vault text is plain text (no HTML rendering) and escaped like the
+  CLI's output; secret fields cannot be copied out through the system clipboard; URLs are
+  never opened; on Windows, GUI windows are excluded from screen capture.
+- 61 GUI tests (pytest-qt, headless) and 4 tests that keep the GUI optional, a
+  cross-platform `gui` CI job, and a core test job that runs without Qt installed.
+
+### Changed
+
+- `cli.create_keyfile` and `cli.split_tags` are public (renamed from `_create_keyfile` and
+  `_split_tags`) so the GUI reuses them. No behavior change.
+
 ## [2.0.0] - 2026-10-15
 
 A complete rewrite after a security audit of v1. **v1 vaults (`vault.db`) are
