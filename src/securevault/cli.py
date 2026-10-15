@@ -206,7 +206,7 @@ def _generated(args: argparse.Namespace) -> tuple[str, float] | None:
     return None
 
 
-def _split_tags(raw: str | None) -> list[str]:
+def split_tags(raw: str | None) -> list[str]:
     return [t.strip() for t in (raw or "").split(",") if t.strip()]
 
 
@@ -218,7 +218,7 @@ def cmd_init(ctx: Context, args: argparse.Namespace) -> int:
     if path.exists():
         raise VaultExistsError(f"a vault already exists at {path}")
     if args.new_keyfile:
-        _create_keyfile(Path(args.new_keyfile))
+        create_keyfile(Path(args.new_keyfile))
         ctx.keyfile_path = Path(args.new_keyfile)
         ctx.say(f"Created keyfile {args.new_keyfile}. Back it up: without it the vault cannot be opened.")
     keyfile = ctx.keyfile()
@@ -244,7 +244,7 @@ def _kdf_from_args(args: argparse.Namespace) -> KdfParams:
     return params
 
 
-def _create_keyfile(path: Path) -> None:
+def create_keyfile(path: Path) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
     try:
         fd = os.open(path, flags, 0o600)
@@ -255,7 +255,7 @@ def _create_keyfile(path: Path) -> None:
 
 
 def cmd_keyfile(ctx: Context, args: argparse.Namespace) -> int:
-    _create_keyfile(Path(args.path))
+    create_keyfile(Path(args.path))
     ctx.say(f"Created keyfile {args.path} (64 random bytes).")
     ctx.say("Keep a backup copy offline. Losing it locks you out just like losing the password.")
     return EXIT_OK
@@ -271,7 +271,7 @@ def cmd_add(ctx: Context, args: argparse.Namespace) -> int:
         password=password,
         url=args.url or "",
         notes=args.notes or "",
-        tags=_split_tags(args.tags),
+        tags=split_tags(args.tags),
         totp=_prompt_totp() if args.totp else "",
     )
     vault.add(entry)
@@ -380,7 +380,7 @@ def cmd_edit(ctx: Context, args: argparse.Namespace) -> int:
             setattr(entry, name, value)
             changed.append(name)
     if args.tags is not None:
-        entry.tags = _split_tags(args.tags)
+        entry.tags = split_tags(args.tags)
         changed.append("tags")
     generated = _generated(args)
     if generated:
@@ -474,7 +474,7 @@ def cmd_passwd(ctx: Context, args: argparse.Namespace) -> int:
     if args.remove_keyfile:
         keyfile = None
     if args.new_keyfile:
-        _create_keyfile(Path(args.new_keyfile))
+        create_keyfile(Path(args.new_keyfile))
         keyfile = crypto.keyfile_secret(Path(args.new_keyfile))
         ctx.say(f"Created keyfile {args.new_keyfile}. Back it up.")
     ctx.say("Choose the new master password.")
