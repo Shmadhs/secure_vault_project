@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -22,3 +23,10 @@ def fast_kdf() -> KdfParams:
 @pytest.fixture
 def vault_path(tmp_path: Path) -> Path:
     return tmp_path / "test.svault"
+
+
+# The GUI tests need the optional `gui` and `gui-test` extras. Without them they
+# are not collected at all, which keeps the core test job free of Qt. (pytest-qt
+# cannot simply be skipped: it aborts the run at start-up if Qt is missing.)
+if importlib.util.find_spec("PySide6") is None or importlib.util.find_spec("pytestqt") is None:
+    collect_ignore = ["gui"]
