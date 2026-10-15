@@ -38,9 +38,21 @@ dev = [
     "pip-audit>=2.7",
 ]
 build = ["pyinstaller>=6.10"]
+# The desktop GUI is optional, so the core keeps its single runtime dependency.
+# PySide6-Essentials ships QtCore/QtGui/QtWidgets only. The full PySide6 adds the
+# Addons wheel (QtWebEngine bundles Chromium), which is size and attack surface
+# a password manager does not need.
+gui = ["PySide6-Essentials>=6.8"]
+# Kept out of "dev": pytest-qt aborts the whole pytest run when no Qt binding is
+# installed, which would break the core-only test job.
+gui-test = ["pytest-qt>=4.4"]
 
 [project.scripts]
 svault = "securevault.cli:main"
+
+# A GUI script runs under pythonw on Windows, so no console window appears.
+[project.gui-scripts]
+svault-gui = "securevault.gui:main"
 
 [project.urls]
 Homepage = "https://github.com/Shmadhs/secure_vault_project"
@@ -90,6 +102,12 @@ ignore = [
 "src/securevault/osutil.py" = ["PLC0415"]
 # The argument-parser builders and the shell loop are long by nature.
 "src/securevault/cli.py" = ["PLR0912", "PLR0915"]
+# Widget construction and per-error message dispatch are long by nature.
+"src/securevault/gui/*.py" = ["PLR0911", "PLR0912", "PLR0915"]
+# PySide6 is imported lazily in the launcher so `svault` never loads Qt; the
+# Win32 calls for screen-capture exclusion only load on Windows.
+"src/securevault/gui/__init__.py" = ["PLC0415"]
+"src/securevault/gui/guards.py" = ["PLC0415"]
 "tests/**" = ["S101", "S105", "S106", "PLR2004", "S603", "PLC0415"]
 
 [tool.mypy]
