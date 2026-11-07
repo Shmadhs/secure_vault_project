@@ -42,7 +42,7 @@ build = ["pyinstaller>=6.10"]
 # PySide6-Essentials ships QtCore/QtGui/QtWidgets only. The full PySide6 adds the
 # Addons wheel (QtWebEngine bundles Chromium), which is size and attack surface
 # a password manager does not need.
-gui = ["PySide6-Essentials>=6.8"]
+gui = ["PySide6-Essentials>=6.12.0"]
 # Kept out of "dev": pytest-qt aborts the whole pytest run when no Qt binding is
 # installed, which would break the core-only test job.
 gui-test = ["pytest-qt>=4.4"]
