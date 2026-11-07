@@ -18,7 +18,7 @@ jobs:
     name: Lint, types, security scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -51,7 +51,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python: ["3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -74,7 +74,7 @@ jobs:
       # Headless Qt: no display server needed.
       QT_QPA_PLATFORM: offscreen
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -90,7 +90,7 @@ jobs:
     name: Real X11 clipboard round trip
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
@@ -107,7 +107,7 @@ jobs:
     name: Build and smoke-test the wheel
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
