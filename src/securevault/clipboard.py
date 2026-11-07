@@ -9,9 +9,12 @@ Design decisions:
 * **Linux** uses ``wl-copy``/``wl-paste`` on Wayland and ``xclip`` or ``xsel``
   on X11. The secret is passed on **stdin**, never in argv, where any local
   user could read it from the process list.
-* **Clearing only removes what we put there.** The clearer compares a SHA-256
-  fingerprint of the current clipboard with the one it was given. If the user
-  has since copied something else, it is left alone.
+* **Clearing only removes what we put there.** The clearer compares the current
+  clipboard against a fingerprint of what we copied. If the user has since
+  copied something else, it is left alone. The fingerprint is an HMAC-SHA256
+  under a random key made for each copy, not a plain hash: a plain hash of a
+  password can be cracked offline with a wordlist, and would be identical every
+  time the same password is copied.
 * **Clearing survives the CLI exiting.** A one-shot ``svault get`` returns at
   once, and a small detached helper clears the clipboard later. The helper
   receives only the fingerprint, over stdin.
@@ -20,7 +23,9 @@ Design decisions:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
+import secrets
 import shutil
 import struct
 import subprocess  # nosec B404 - only fixed argv lists, never a shell
@@ -31,7 +36,8 @@ from typing import Any, Protocol
 
 DEFAULT_CLEAR_SECONDS = 20
 HELPER_COMMAND = "__clipboard-clear"
-_FINGERPRINT_SIZE = 32
+_KEY_SIZE = 32
+_FINGERPRINT_SIZE = _KEY_SIZE + 32  # key + HMAC-SHA256 tag
 
 
 class ClipboardUnavailableError(RuntimeError):
@@ -47,7 +53,17 @@ class Clipboard(Protocol):
 
 
 def fingerprint(text: str) -> bytes:
-    return hashlib.sha256(text.encode("utf-8")).digest()
+    """A one-off key followed by the HMAC of ``text`` under it (see the module docstring)."""
+    key = secrets.token_bytes(_KEY_SIZE)
+    return key + hmac.new(key, text.encode("utf-8"), hashlib.sha256).digest()
+
+
+def matches(expected: bytes, text: str) -> bool:
+    """True if ``text`` is the value ``expected`` was made from. Constant-time comparison."""
+    if len(expected) != _FINGERPRINT_SIZE:
+        return False
+    key, tag = expected[:_KEY_SIZE], expected[_KEY_SIZE:]
+    return hmac.compare_digest(tag, hmac.new(key, text.encode("utf-8"), hashlib.sha256).digest())
 
 
 # --------------------------------------------------------------------------- Windows
@@ -248,7 +264,7 @@ def clear_if_unchanged(clipboard: Clipboard, expected: bytes) -> bool:
         current = clipboard.paste()
     except (ClipboardUnavailableError, OSError, subprocess.SubprocessError):
         return False
-    if fingerprint(current) != expected:
+    if not matches(expected, current):
         return False
     clipboard.clear()
     return True

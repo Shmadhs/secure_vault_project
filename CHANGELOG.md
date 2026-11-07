@@ -36,6 +36,13 @@ All notable changes are documented here. The format follows
 - `cli.create_keyfile` and `cli.split_tags` are public (renamed from `_create_keyfile` and
   `_split_tags`) so the GUI reuses them. No behavior change.
 
+### Security
+
+- The clipboard fingerprint (used to clear only what SecureVault copied) is now an
+  HMAC-SHA256 under a random key made for each copy, instead of a plain SHA-256 of the
+  password, which could have been cracked offline with a wordlist and was identical
+  every time the same password was copied. Found by CodeQL.
+
 ## [2.0.0] - 2026-10-15
 
 A complete rewrite after a security audit of v1. **v1 vaults (`vault.db`) are

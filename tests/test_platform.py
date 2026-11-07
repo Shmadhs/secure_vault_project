@@ -41,6 +41,15 @@ def test_does_not_clear_what_the_user_copied_later() -> None:
     assert board.value == "something the user copied afterwards"
 
 
+def test_fingerprint_is_keyed_per_copy() -> None:
+    first, second = clipboard.fingerprint("secret"), clipboard.fingerprint("secret")
+    assert first != second  # a fresh key each time, so no stable hash of the password
+    assert clipboard.matches(first, "secret")
+    assert clipboard.matches(second, "secret")
+    assert not clipboard.matches(first, "Secret")
+    assert not clipboard.matches(first[:-1], "secret")
+
+
 def test_helper_runs_from_package_parent_not_cwd() -> None:
     argv, cwd = clipboard._helper_argv(20)
     assert argv[-2:] == [clipboard.HELPER_COMMAND, "20"]
@@ -64,7 +73,10 @@ def test_helper_spawn_is_detached_and_gets_only_a_fingerprint(monkeypatch: pytes
     if frozen:
         monkeypatch.setattr(sys, "frozen", True, raising=False)
     clipboard.schedule_clear("the-secret", 20)
-    assert captured["sent"] == clipboard.fingerprint("the-secret")  # never the secret itself
+    sent = captured["sent"]
+    assert isinstance(sent, bytes)
+    assert clipboard.matches(sent, "the-secret")  # a fingerprint of it ...
+    assert b"the-secret" not in sent  # ... never the secret itself
     assert "the-secret" not in " ".join(captured["argv"])  # type: ignore[arg-type]
     env = captured["env"]
     assert isinstance(env, dict)
