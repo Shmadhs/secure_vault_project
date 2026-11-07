@@ -12,7 +12,7 @@ import os
 import sys
 import tempfile
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .errors import VaultError
@@ -101,7 +101,7 @@ def make_backup(vault_path: Path, data: bytes, keep: int) -> None:
     """Store an encrypted copy of the previous vault version, keeping the newest ``keep``."""
     if keep <= 0:
         return
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     atomic_write(backup_dir(vault_path) / f"{vault_path.stem}.{stamp}{vault_path.suffix}", data)
     for old in list_backups(vault_path)[keep:]:
         old.unlink(missing_ok=True)

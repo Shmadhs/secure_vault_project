@@ -31,6 +31,8 @@ All notable changes are documented here. The format follows
 
 ### Changed
 
+- **Requires Python 3.12 or newer.** Python 3.10 reached end of life in October 2026 and
+  no longer receives security fixes; CI now tests 3.12, 3.13 and 3.14.
 - The README leads with what SecureVault does as a password manager; the cryptography
   moved to "Under the hood" and the security design section.
 - `cli.create_keyfile` and `cli.split_tags` are public (renamed from `_create_keyfile` and

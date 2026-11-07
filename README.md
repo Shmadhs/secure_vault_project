@@ -5,7 +5,7 @@ computer. A desktop app and a command line; no cloud, no account, no telemetry.*
 
 [![CI](https://github.com/Shmadhs/secure_vault_project/actions/workflows/ci.yml/badge.svg)](https://github.com/Shmadhs/secure_vault_project/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/Shmadhs/secure_vault_project/actions/workflows/codeql.yml/badge.svg)](https://github.com/Shmadhs/secure_vault_project/actions/workflows/codeql.yml)
-![Python](https://img.shields.io/badge/python-3.10%E2%80%933.14-blue)
+![Python](https://img.shields.io/badge/python-3.12%E2%80%933.14-blue)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -44,7 +44,7 @@ encrypted vault on your disk, behind a single master password.
 
 ## Install
 
-Requires Python 3.10+.
+Requires Python 3.12+.
 
 **Desktop app** (includes the command line):
 
@@ -208,7 +208,7 @@ lists every residual risk.
 
 ## Quality gates
 
-Every push runs on Windows, Linux and macOS with Python 3.10–3.14:
+Every push runs on Windows, Linux and macOS with Python 3.12–3.14:
 
 * **320 tests**, including:
   * known-answer tests for Argon2id (RFC 9106 §5.3), TOTP (RFC 6238 Appendix B) and HOTP (RFC 4226);

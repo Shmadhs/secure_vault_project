@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 from PySide6.QtCore import QEventLoop, Qt, QThread
 from PySide6.QtWidgets import QDialog, QFileDialog, QLabel, QMessageBox, QProgressDialog, QWidget
@@ -102,7 +102,7 @@ def choose_path(
     return Path(chosen) if chosen else None
 
 
-class _Worker(QThread, Generic[T]):
+class _Worker[T](QThread):
     def __init__(self, fn: Callable[[], T]) -> None:
         super().__init__()
         self._fn = fn
@@ -121,7 +121,7 @@ class _Worker(QThread, Generic[T]):
 busy_hooks: list[Callable[[int], None]] = []
 
 
-def run_blocking(parent: QWidget | None, text: str, fn: Callable[[], T]) -> T:
+def run_blocking[T](parent: QWidget | None, text: str, fn: Callable[[], T]) -> T:
     """Run ``fn`` on a worker thread and wait for it without freezing the window.
 
     The local event loop keeps repainting, but excludes user input, so nothing

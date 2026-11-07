@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -14,7 +14,7 @@ STRONG = "x7#Kp2!vQm9@Lr4$Wn8^"
 
 
 def test_audit_findings() -> None:
-    now = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 1, tzinfo=UTC)
     old = (now - timedelta(days=500)).isoformat()
     entries = [
         Entry("A", password=STRONG),

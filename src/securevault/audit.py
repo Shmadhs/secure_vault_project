@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .generator import estimate_strength
 from .model import Entry, parse_timestamp
@@ -33,7 +33,7 @@ def audit(
     weak_bits: float = WEAK_BITS,
     now: datetime | None = None,
 ) -> list[Finding]:
-    current = now or datetime.now(timezone.utc)
+    current = now or datetime.now(UTC)
     findings: list[Finding] = []
     by_password: dict[str, list[Entry]] = defaultdict(list)
 
