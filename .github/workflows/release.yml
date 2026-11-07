@@ -41,7 +41,7 @@ jobs:
           "${{ matrix.built }}" gen --words 6
       - shell: bash
         run: mv "${{ matrix.built }}" "dist/${{ matrix.asset }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset }}
           path: dist/${{ matrix.asset }}
@@ -57,7 +57,7 @@ jobs:
         with:
           python-version: "3.13"
       - run: pip install build && python -m build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: python-dist
           path: dist/*
