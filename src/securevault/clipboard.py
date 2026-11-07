@@ -11,10 +11,10 @@ Design decisions:
   user could read it from the process list.
 * **Clearing only removes what we put there.** The clearer compares the current
   clipboard against a fingerprint of what we copied. If the user has since
-  copied something else, it is left alone. The fingerprint is an HMAC-SHA256
-  under a random key made for each copy, not a plain hash: a plain hash of a
-  password can be cracked offline with a wordlist, and would be identical every
-  time the same password is copied.
+  copied something else, it is left alone. The fingerprint is PBKDF2-HMAC-SHA256
+  with a random salt for each copy, not a plain hash: a fast hash of a password
+  can be cracked offline with a wordlist, and an unsalted one would be identical
+  every time the same password is copied.
 * **Clearing survives the CLI exiting.** A one-shot ``svault get`` returns at
   once, and a small detached helper clears the clipboard later. The helper
   receives only the fingerprint, over stdin.
@@ -36,8 +36,11 @@ from typing import Any, Protocol
 
 DEFAULT_CLEAR_SECONDS = 20
 HELPER_COMMAND = "__clipboard-clear"
-_KEY_SIZE = 32
-_FINGERPRINT_SIZE = _KEY_SIZE + 32  # key + HMAC-SHA256 tag
+_SALT_SIZE = 16
+_FINGERPRINT_SIZE = _SALT_SIZE + 32  # salt + PBKDF2-HMAC-SHA256 digest
+# Slow enough that guessing passwords against a captured fingerprint is expensive, fast
+# enough (well under 0.1 s) that copying a password does not feel slower.
+_FINGERPRINT_ITERATIONS = 200_000
 
 
 class ClipboardUnavailableError(RuntimeError):
@@ -52,18 +55,22 @@ class Clipboard(Protocol):
     def clear(self) -> None: ...
 
 
+def _derive(salt: bytes, text: str) -> bytes:
+    return hashlib.pbkdf2_hmac("sha256", text.encode("utf-8"), salt, _FINGERPRINT_ITERATIONS)
+
+
 def fingerprint(text: str) -> bytes:
-    """A one-off key followed by the HMAC of ``text`` under it (see the module docstring)."""
-    key = secrets.token_bytes(_KEY_SIZE)
-    return key + hmac.new(key, text.encode("utf-8"), hashlib.sha256).digest()
+    """A one-off salt followed by a slow PBKDF2 digest of ``text`` (see the module docstring)."""
+    salt = secrets.token_bytes(_SALT_SIZE)
+    return salt + _derive(salt, text)
 
 
 def matches(expected: bytes, text: str) -> bool:
     """True if ``text`` is the value ``expected`` was made from. Constant-time comparison."""
     if len(expected) != _FINGERPRINT_SIZE:
         return False
-    key, tag = expected[:_KEY_SIZE], expected[_KEY_SIZE:]
-    return hmac.compare_digest(tag, hmac.new(key, text.encode("utf-8"), hashlib.sha256).digest())
+    salt, digest = expected[:_SALT_SIZE], expected[_SALT_SIZE:]
+    return hmac.compare_digest(digest, _derive(salt, text))
 
 
 # --------------------------------------------------------------------------- Windows

@@ -40,8 +40,8 @@ All notable changes are documented here. The format follows
 
 ### Security
 
-- The clipboard fingerprint (used to clear only what SecureVault copied) is now an
-  HMAC-SHA256 under a random key made for each copy, instead of a plain SHA-256 of the
+- The clipboard fingerprint (used to clear only what SecureVault copied) is now
+  PBKDF2-HMAC-SHA256 with a random salt for each copy, instead of a plain SHA-256 of the
   password, which could have been cracked offline with a wordlist and was identical
   every time the same password was copied. Found by CodeQL.
 
