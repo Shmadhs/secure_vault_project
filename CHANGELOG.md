@@ -6,6 +6,8 @@ All notable changes are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-08
+
 ### Added
 
 - Optional desktop app, `svault-gui` (`pip install "securevault[gui]"`, PySide6-Essentials).
