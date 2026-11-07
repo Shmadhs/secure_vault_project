@@ -37,7 +37,7 @@ dev = [
     "bandit>=1.7.9",
     "pip-audit>=2.7",
 ]
-build = ["pyinstaller>=6.10"]
+build = ["pyinstaller>=6.22.3"]
 # The desktop GUI is optional, so the core keeps its single runtime dependency.
 # PySide6-Essentials ships QtCore/QtGui/QtWidgets only. The full PySide6 adds the
 # Addons wheel (QtWebEngine bundles Chromium), which is size and attack surface
