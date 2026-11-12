@@ -45,7 +45,7 @@ build = ["pyinstaller>=6.22.3"]
 gui = ["PySide6-Essentials>=6.12.0"]
 # Kept out of "dev": pytest-qt aborts the whole pytest run when no Qt binding is
 # installed, which would break the core-only test job.
-gui-test = ["pytest-qt>=4.4"]
+gui-test = ["pytest-qt>=4.5.0"]
 
 [project.scripts]
 svault = "securevault.cli:main"
