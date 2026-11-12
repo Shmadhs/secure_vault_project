@@ -35,7 +35,7 @@ dev = [
     "ruff>=0.6",
     "mypy>=2.4.1",
     "bandit>=1.7.9",
-    "pip-audit>=2.7",
+    "pip-audit>=2.10.1",
 ]
 build = ["pyinstaller>=6.22.3"]
 # The desktop GUI is optional, so the core keeps its single runtime dependency.
