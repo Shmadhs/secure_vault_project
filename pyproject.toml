@@ -25,7 +25,7 @@ classifiers = [
 ]
 # One runtime dependency, kept deliberately minimal: every dependency is
 # supply-chain attack surface. Argon2id needs cryptography 44+.
-dependencies = ["cryptography>=44"]
+dependencies = ["cryptography>=50.0.2"]
 
 [project.optional-dependencies]
 dev = [
